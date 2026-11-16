@@ -1,0 +1,167 @@
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { initializeApp } from 'firebase/app';
+import { 
+  getAuth, 
+  signInAnonymously, 
+  signInWithCustomToken, 
+  onAuthStateChanged 
+} from 'firebase/auth';
+import { 
+  getFirestore, 
+  collection, 
+  doc, 
+  setDoc, 
+  getDoc, 
+  updateDoc, 
+  deleteDoc, 
+  onSnapshot, 
+  addDoc 
+} from 'firebase/firestore';
+import { 
+  Sprout, ShoppingCart, Heart, Search, User, ShieldCheck, Truck, 
+  Sparkles, Filter, CheckCircle2, AlertCircle, Package, ArrowRight, 
+  Plus, Minus, Trash2, FileText, Download, Star, MapPin, Phone, 
+  Mail, Award, TrendingUp, DollarSign, Users,Store, Check, X, 
+  RefreshCw, ChevronRight, Eye, Layers, Calendar, Clock, Lock, 
+  LogOut, Sun, Moon, Info, HelpCircle, Bell, Tag, Percent, Scale,
+  Printer, Share2, Repeat, SlidersHorizontal, ArrowUpDown, Send, Bot
+} from 'lucide-react';
+import { 
+  AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, 
+  ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell 
+} from 'recharts';
+
+// ==========================================
+// 1. FIREBASE CONFIGURATION & INITIALIZATION
+// ==========================================
+const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'farm2door-prod';
+
+// Cryptographic SHA-256 helper so we never store or compare plaintext admin passwords
+async function sha256Hash(message) {
+  const msgBuffer = new TextEncoder().encode(message.trim());
+  const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// ==========================================
+// 2. 108 REALISTIC AGRICULTURAL PRODUCTS SEED
+// ==========================================
+const CATEGORIES = [
+  "Fresh Vegetables",
+  "Fresh Fruits",
+  "Organic Products",
+  "Grains & Cereals",
+  "Pulses & Lentils",
+  "Dairy Products",
+  "Spices & Herbs",
+  "Dry Fruits & Nuts",
+  "Seeds & Farming Products",
+  "Honey & Natural Products",
+  "Farm Fresh Juices",
+  "Seasonal Products"
+];
+
+const FARMERS_LIST = [
+  { id: "farmer-1", name: "Rameshwar Patel", farmName: "Green Valley Organic Farms", location: "Nashik, Maharashtra", rating: 4.9, verified: true, story: "3rd generation cultivator specializing in residue-free vegetables and drip-irrigated orchards.", joined: "2022" },
+  { id: "farmer-2", name: "Gurpreet Singh Gill", farmName: "Golden Fields Punjab", location: "Ludhiana, Punjab", rating: 4.8, verified: true, story: "Pioneering heirloom wheat grains, basmati rice, and cold-pressed mustard oils.", joined: "2021" },
+  { id: "farmer-3", name: "Lakshmi Nair", farmName: "Malabar Spice & Botanicals", location: "Wayanad, Kerala", rating: 4.9, verified: true, story: "Sustainable forest-edge spice gardening producing high-piperine black pepper and cardamom.", joined: "2023" },
+  { id: "farmer-4", name: "Kailash Choudhary", farmName: "Gir Amrit Dairy & Apiary", location: "Junagadh, Gujarat", rating: 4.9, verified: true, story: "Free-grazing A2 Gir cow ethical dairy and wild forest multiflora bee conservation.", joined: "2022" },
+  { id: "farmer-5", name: "Tenzin Norbu", farmName: "Himalayan High Orchards", location: "Kinnaur, Himachal Pradesh", rating: 4.8, verified: true, story: "High-altitude glacial-fed apple, walnut, and apricot orchards harvested at peak Brix sweetness.", joined: "2023" }
+];
+
+// Curated Unsplash visual mapping by category & item keywords
+const CATEGORY_IMAGES = {
+  "Fresh Vegetables": "https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=600&q=80",
+  "Fresh Fruits": "https://images.unsplash.com/photo-1610832958506-aa56368176cf?auto=format&fit=crop&w=600&q=80",
+  "Organic Products": "https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=600&q=80",
+  "Grains & Cereals": "https://images.unsplash.com/photo-1586201375761-83865001e31c?auto=format&fit=crop&w=600&q=80",
+  "Pulses & Lentils": "https://images.unsplash.com/photo-1515543904379-3d757afe72e4?auto=format&fit=crop&w=600&q=80",
+  "Dairy Products": "https://images.unsplash.com/photo-1550583724-b2692b85b150?auto=format&fit=crop&w=600&q=80",
+  "Spices & Herbs": "https://images.unsplash.com/photo-1596040033229-a9821ebd058d?auto=format&fit=crop&w=600&q=80",
+  "Dry Fruits & Nuts": "https://images.unsplash.com/photo-1596591606975-97ee5cef3a1e?auto=format&fit=crop&w=600&q=80",
+  "Seeds & Farming Products": "https://images.unsplash.com/photo-1416879595882-3373a0480b5b?auto=format&fit=crop&w=600&q=80",
+  "Honey & Natural Products": "https://images.unsplash.com/photo-1587049352847-4a222e784d38?auto=format&fit=crop&w=600&q=80",
+  "Farm Fresh Juices": "https://images.unsplash.com/photo-1600271886742-f049cd451bba?auto=format&fit=crop&w=600&q=80",
+  "Seasonal Products": "https://images.unsplash.com/photo-1553279768-865429fa0078?auto=format&fit=crop&w=600&q=80"
+};
+
+const RAW_CATALOG_DATA = [
+  // 1. Fresh Vegetables (9 items)
+  ["Desi Heirloom Tomatoes", "Fresh Vegetables", "Vine-ripened tangy red tomatoes rich in lycopene", 36, "kg", 140, "farmer-1", false, false, 10, "https://images.unsplash.com/photo-1592924357228-91a4daadcfea?auto=format&fit=crop&w=600&q=80"],
+  ["Indore Pahadi Potatoes", "Fresh Vegetables", "Low-sugar firm potatoes ideal for crisps and curries", 32, "kg", 300, "farmer-2", false, false, 5, "https://images.unsplash.com/photo-1518977676601-b53f82aba655?auto=format&fit=crop&w=600&q=80"],
+  ["Lasalgaon Red Onions", "Fresh Vegetables", "Pungent, sun-cured export-grade Nashik red onions", 42, "kg", 250, "farmer-1", false, false, 8, "https://images.unsplash.com/photo-1618512496248-a07fe83aa8cb?auto=format&fit=crop&w=600&q=80"],
+  ["Tender Palak Spinach", "Fresh Vegetables", "Morning-harvested iron-rich leafy green spinach", 40, "kg", 65, "farmer-1", true, false, 0, "https://images.unsplash.com/photo-1576045057995-568f588f82fb?auto=format&fit=crop&w=600&q=80"],
+  ["Farm Fresh Cauliflower", "Fresh Vegetables", "Compact ivory-white curds free from synthetic sprays", 48, "kg", 80, "farmer-1", false, true, 12, "https://images.unsplash.com/photo-1568584711075-3d021a7c3ca3?auto=format&fit=crop&w=600&q=80"],
+  ["Tender Ladyfinger (Bhindi)", "Fresh Vegetables", "Snap-fresh young green okra pods", 55, "kg", 90, "farmer-1", false, false, 5, "https://images.unsplash.com/photo-1425543103986-22abb7d7e8d2?auto=format&fit=crop&w=600&q=80"],
+  ["Purple Bharta Brinjal", "Fresh Vegetables", "Glossy, seedless large roasting eggplants", 44, "kg", 75, "farmer-1", false, false, 0, "https://images.unsplash.com/photo-1615484477778-ca3b77940c25?auto=format&fit=crop&w=600&q=80"],
+  ["Crunchy Green Capsicum", "Fresh Vegetables", "Thick-walled aromatic bell peppers", 68, "kg", 85, "farmer-1", false, false, 10, "https://images.unsplash.com/photo-1563565375-f3fdfdbefa83?auto=format&fit=crop&w=600&q=80"],
+  ["Sweet Orange Carrots", "Fresh Vegetables", "Crisp beta-carotene rich tender roots", 50, "kg", 110, "farmer-2", true, true, 15, "https://images.unsplash.com/photo-1598170845058-32b9d6a5da37?auto=format&fit=crop&w=600&q=80"],
+
+  // 2. Fresh Fruits (9 items)
+  ["Kinnaur Royal Apples", "Fresh Fruits", "Crunchy, honey-sweet high altitude Himalayan apples", 160, "kg", 180, "farmer-5", true, true, 10, "https://images.unsplash.com/photo-1560806887-1e4cd0b6cbd6?auto=format&fit=crop&w=600&q=80"],
+  ["Jalgaon Robusta Bananas", "Fresh Fruits", "Naturally carbide-free ripened potassium-rich bananas", 52, "kg", 120, "farmer-1", false, false, 5, "https://images.unsplash.com/photo-1571771894821-ce9b6c11b08e?auto=format&fit=crop&w=600&q=80"],
+  ["Solapur Bhagwa Pomegranates", "Fresh Fruits", "Ruby-red soft-seeded antioxidant powerhouse", 145, "kg", 95, "farmer-1", true, false, 12, "https://images.unsplash.com/photo-1615485290382-441e4d049cb5?auto=format&fit=crop&w=600&q=80"],
+  ["Nagpur Santra Oranges", "Fresh Fruits", "Juicy GI-tagged sweet-tangy citrus oranges", 85, "kg", 150, "farmer-1", false, true, 8, "https://images.unsplash.com/photo-1547514701-42782101795e?auto=format&fit=crop&w=600&q=80"],
+  ["Red Lady Taiwan Papaya", "Fresh Fruits", "Tree-ripened digestive-friendly sweet orange flesh", 48, "kg", 80, "farmer-1", false, false, 0, "https://images.unsplash.com/photo-1517282009859-f000ec3b26fe?auto=format&fit=crop&w=600&q=80"],
+  ["Allahabad Safeda Guava", "Fresh Fruits", "Crisp white-fleshed Vitamin-C bomb", 65, "kg", 90, "farmer-2", true, true, 10, "https://images.unsplash.com/photo-1536511132770-e5058c7e8c46?auto=format&fit=crop&w=600&q=80"],
+  ["Nashik Thompson Seedless Grapes", "Fresh Fruits", "Crisp emerald green sweet table grapes", 110, "kg", 105, "farmer-1", false, true, 15, "https://images.unsplash.com/photo-1537640538966-79f369143f8f?auto=format&fit=crop&w=600&q=80"],
+  ["Kiran Sugar Baby Watermelon", "Fresh Fruits", "Deep crimson hydrating summer melon", 30, "kg", 200, "farmer-1", false, true, 5, "https://images.unsplash.com/photo-1587049352846-4a222e784d38?auto=format&fit=crop&w=600&q=80"],
+  ["Vazhakulam Mauritius Pineapple", "Fresh Fruits", "Intensely aromatic golden GI-tag Kerala pineapple", 90, "kg", 70, "farmer-3", true, false, 0, "https://images.unsplash.com/photo-1550258987-190a2d41a8ba?auto=format&fit=crop&w=600&q=80"],
+
+  // 3. Organic Products (9 items)
+  ["NPOP Certified Organic Broccoli", "Organic Products", "Zero-pesticide nutrient-dense green florets", 130, "kg", 45, "farmer-1", true, true, 10, "https://images.unsplash.com/photo-1459411621453-7b03977f4bfc?auto=format&fit=crop&w=600&q=80"],
+  ["Organic Red Quinoa Grain", "Organic Products", "Complete plant-protein gluten-free super grain", 320, "kg", 60, "farmer-2", true, false, 15, "https://images.unsplash.com/photo-1586201375761-83865001e31c?auto=format&fit=crop&w=600&q=80"],
+  ["Organic Cold-Pressed Mustard Oil", "Organic Products", "Kachi Ghani wood-pressed pungent yellow sarson oil", 240, "litre", 85, "farmer-2", true, false, 8, "https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?auto=format&fit=crop&w=600&q=80"],
+  ["Certified Organic Brown Sugar", "Organic Products", "Unrefined sulphur-free natural cane crystals", 95, "kg", 130, "farmer-1", true, false, 5, "https://images.unsplash.com/photo-1581441363689-1f3c3c414635?auto=format&fit=crop&w=600&q=80"],
+  ["Organic Cherry Tomatoes", "Organic Products", "Bite-sized sweet salad bursts grown in cocopeat", 120, "kg", 50, "farmer-1", true, false, 10, "https://images.unsplash.com/photo-1561136594-7f68413baa99?auto=format&fit=crop&w=600&q=80"],
+  ["Organic Baby Kale Leaves", "Organic Products", "Curly antioxidant-rich superfood greens", 160, "kg", 35, "farmer-1", true, true, 0, "https://images.unsplash.com/photo-1524179091875-bf99a9a6af57?auto=format&fit=crop&w=600&q=80"],
+  ["Organic Wood-Pressed Groundnut Oil", "Organic Products", "Sweet nutty aroma unrefined cooking oil", 260, "litre", 90, "farmer-4", true, false, 10, "https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?auto=format&fit=crop&w=600&q=80"],
+  ["Organic Black Chia Seeds", "Organic Products", "Omega-3 and dietary fiber rich raw superseeds", 420, "kg", 55, "farmer-3", true, false, 12, "https://images.unsplash.com/photo-1515543904379-3d757afe72e4?auto=format&fit=crop&w=600&q=80"],
+  ["Organic Roasted Flax Seeds (Alsi)", "Organic Products", "Crunchy heart-healthy lignan-rich oilseeds", 190, "kg", 75, "farmer-2", true, false, 5, "https://images.unsplash.com/photo-1515543904379-3d757afe72e4?auto=format&fit=crop&w=600&q=80"],
+
+  // 4. Grains & Cereals (9 items)
+  ["MP Sharbati Whole Wheat", "Grains & Cereals", "Golden rain-fed Sehore wheat for ultra-soft rotis", 54, "kg", 500, "farmer-2", true, false, 8, "https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?auto=format&fit=crop&w=600&q=80"],
+  ["Aged Dehradun Basmati Rice", "Grains & Cereals", "24-month aged extra-long slender aromatic grain", 135, "kg", 350, "farmer-2", false, false, 12, "https://images.unsplash.com/photo-1586201375761-83865001e31c?auto=format&fit=crop&w=600&q=80"],
+  ["Unpolished Finger Millet (Ragi)", "Grains & Cereals", "High-calcium ancient millet grain", 68, "kg", 180, "farmer-1", true, false, 5, "https://images.unsplash.com/photo-1586201375761-83865001e31c?auto=format&fit=crop&w=600&q=80"],
+  ["Solapur Jowar (Sorghum)", "Grains & Cereals", "Gluten-free digestively light white millet", 62, "kg", 220, "farmer-1", true, false, 5, "https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?auto=format&fit=crop&w=600&q=80"],
+  ["Rajasthani Pearl Millet (Bajra)", "Grains & Cereals", "Warming iron-packed winter staple grain", 58, "kg", 200, "farmer-2", true, true, 10, "https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?auto=format&fit=crop&w=600&q=80"],
+  ["Indrayani Sticky Fragrant Rice", "Grains & Cereals", "Maval valley unpolished aromatic comfort rice", 88, "kg", 240, "farmer-1", true, false, 8, "https://images.unsplash.com/photo-1586201375761-83865001e31c?auto=format&fit=crop&w=600&q=80"],
+  ["Khapli (Emmer) Ancient Wheat", "Grains & Cereals", "Low glycemic index diabetic-friendly ancient grain", 115, "kg", 150, "farmer-1", true, false, 10, "https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?auto=format&fit=crop&w=600&q=80"],
+  ["Rolled Breakfast Oats", "Grains & Cereals", "100% wholegrain soluble beta-glucan fiber oats", 150, "kg", 110, "farmer-2", true, false, 15, "https://images.unsplash.com/photo-1586201375761-83865001e31c?auto=format&fit=crop&w=600&q=80"],
+  ["Foxtail Millet (Kangni)", "Grains & Cereals", "Low-carb smart millet replacement for white rice", 95, "kg", 130, "farmer-3", true, false, 5, "https://images.unsplash.com/photo-1586201375761-83865001e31c?auto=format&fit=crop&w=600&q=80"],
+
+  // 5. Pulses & Lentils (9 items)
+  ["Unpolished Deshi Toor Dal", "Pulses & Lentils", "Zero-oil-polish aromatic pigeon pea split lentils", 148, "kg", 260, "farmer-1", true, false, 8, "https://images.unsplash.com/photo-1515543904379-3d757afe72e4?auto=format&fit=crop&w=600&q=80"],
+  ["Yellow Split Moong Dal", "Pulses & Lentils", "Easy-to-digest protein-rich comfort lentil", 125, "kg", 210, "farmer-2", true, false, 5, "https://images.unsplash.com/photo-1515543904379-3d757afe72e4?auto=format&fit=crop&w=600&q=80"],
+  ["Whole Green Moong Beans", "Pulses & Lentils", "High-germination whole beans ideal for sprouting", 130, "kg", 190, "farmer-2", true, false, 5, "https://images.unsplash.com/photo-1515543904379-3d757afe72e4?auto=format&fit=crop&w=600&q=80"],
+  ["Red Masoor Dal Split", "Pulses & Lentils", "Fast-cooking orange-red lentils with earthy flavor", 110, "kg", 175, "farmer-2", false, false, 10, "https://images.unsplash.com/photo-1515543904379-3d757afe72e4?auto=format&fit=crop&w=600&q=80"],
+  ["Punjabi Chana Dal", "Pulses & Lentils", "Nutty split Bengal gram for dals and snacks", 98, "kg", 230, "farmer-2", false, false, 5, "https://images.unsplash.com/photo-1515543904379-3d757afe72e4?auto=format&fit=crop&w=600&q=80"],
+  ["Himalayan Jammu Rajma", "Pulses & Lentils", "Small red kidney beans that turn creamy when simmered", 165, "kg", 140, "farmer-5", true, false, 10, "https://images.unsplash.com/photo-1515543904379-3d757afe72e4?auto=format&fit=crop&w=600&q=80"],
+  ["Bold Kabuli Chickpeas (Chole)", "Pulses & Lentils", "Large creamy-white protein-packed garbanzo beans", 155, "kg", 160, "farmer-2", false, false, 8, "https://images.unsplash.com/photo-1515543904379-3d757afe72e4?auto=format&fit=crop&w=600&q=80"],
+  ["Black Whole Urad Dal (Sabut)", "Pulses & Lentils", "Essential slow-simmered Dal Makhani lentil", 142, "kg", 150, "farmer-2", true, false, 5, "https://images.unsplash.com/photo-1515543904379-3d757afe72e4?auto=format&fit=crop&w=600&q=80"],
+  ["Farm Brown Lobia (Black-Eyed Peas)", "Pulses & Lentils", "Folate-rich earthy beans for curries and salads", 118, "kg", 120, "farmer-1", true, false, 0, "https://images.unsplash.com/photo-1515543904379-3d757afe72e4?auto=format&fit=crop&w=600&q=80"],
+
+  // 6. Dairy Products (9 items)
+  ["A2 Gir Cow Cultured Bilona Ghee", "Dairy Products", "Hand-churned from curd over woodfire in small batches", 1250, "litre", 45, "farmer-4", true, false, 10, "https://images.unsplash.com/photo-1631451095765-2c91616fc9e6?auto=format&fit=crop&w=600&q=80"],
+  ["Raw Farm Fresh A2 Cow Milk", "Dairy Products", "Chilled within 30 mins of milking, glass-bottled", 78, "litre", 80, "farmer-4", true, false, 0, "https://images.unsplash.com/photo-1550583724-b2692b85b150?auto=format&fit=crop&w=600&q=80"],
+  ["Artisanal Malai Paneer", "Dairy Products", "Soft, lemon-curdled fresh cottage cheese", 420, "kg", 40, "farmer-4", true, false, 5, "https://images.unsplash.com/photo-1631451095765-2c91616fc9e6?auto=format&fit=crop&w=600&q=80"],
+  ["Clay-Pot Set Probiotic Dahi", "Dairy Products", "Thick creamy curd set naturally in earthen matkas", 95, "kg", 55, "farmer-4", true, false, 0, "https://images.unsplash.com/photo-1550583724-b2692b85b150?auto=format&fit=crop&w=600&q=80"],
+  ["White Unsalted Makhan (Butter)", "Dairy Products", "Freshly churned cultured white farmhouse butter", 580, "kg", 35, "farmer-4", true, false, 8, "https://images.unsplash.com/photo-1589985270826-4b7bb135bc9d?auto=format&fit=crop&w=600&q=80"],
+  ["Spiced Gujarati Chaas (Buttermilk)", "Dairy Products", "Refreshing cumin and mint infused bilona buttermilk", 45, "litre", 90, "farmer-4", true, false, 0, "https://images.unsplash.com/photo-1550583724-b2692b85b150?auto=format&fit=crop&w=600&q=80"],
+  ["Pure Murrah Buffalo Bilona Ghee", "Dairy Products", "Granular white-gold aromatic buffalo ghee", 920, "litre", 50, "farmer-2", true, false, 10, "https://images.unsplash.com/photo-1631451095765-2c91616fc9e6?auto=format&fit=crop&w=600&q=80"],
+  ["Unsweetened Bhuna Khoya (Mawa)", "Dairy Products", "Slow-reduced whole milk solids for traditional sweets", 460, "kg", 30, "farmer-4", false, true, 5, "https://images.unsplash.com/photo-1589985270826-4b7bb135bc9d?auto=format&fit=crop&w=600&q=80"],
+  ["Himalayan Yak Milk Hard Chhurpi", "Dairy Products", "High-protein traditional smoked artisanal cheese", 750, "kg", 25, "farmer-5", true, false, 12, "https://images.unsplash.com/photo-1589985270826-4b7bb135bc9d?auto=format&fit=crop&w=600&q=80"],
+
+  // 7. Spices & Herbs (9 items)
+  ["Waigaon High-Curcumin Turmeric", "Spices & Herbs", "6.5%+ curcumin single-origin stone-ground haldi", 280, "kg", 95, "farmer-1", true, false, 10, "https://images.unsplash.com/photo-1615485500704-8e990f9900f7?auto=format&fit=crop&w=600&q=80"],
+  ["Guntur Teja Red Chilli Powder", "Spices & Herbs", "Fiery natural crimson sun-dried chilli", 340, "kg", 85, "farmer-3", true, false, 8, "https://images.unsplash.com/photo-1596040033229-a9821ebd058d?auto=format&fit=crop&w=600&q=80"],
+  ["Unjha Bold Cumin Seeds (Jeera)", "Spices & Herbs", "Essential oil-rich aromatic whole cumin seeds", 460, "kg", 70, "farmer-4", true, false, 10, "https://images.unsplash.com/photo-1596040033229-a9821ebd058d?auto=format&fit=crop&w=600&q=80"],
+  ["Wayanad Tellicherry Black Pepper", "Spices & Herbs", "Bold TGSEB grade pungent whole black peppercorns", 720, "kg", 60, "farmer-3", true, false, 12, "https://images.unsplash.com/photo-1596040033229-a9821ebd058d?auto=format&fit=crop&w=600&q=80"],
+  ["Idukki 8mm Green Cardamom (Elaichi)", "Spices & Herbs", "Export-grade aromatic emerald green pods", 2400, "kg", 25, "farmer-3", true, false, 15, "https://images.unsplash.com/photo-1596040033229-a9821ebd058d?auto=format&fit=crop&w=600&q=80"],
+  ["Kota Eagle Coriander Seeds (Dhaniya)", "Spices & Herbs", "Citrusy green whole coriander seeds", 210, "kg", 110, "farmer-2", true, false, 5, "https://images.unsplash.com/photo-1596040033229-a9821ebd058d?auto=format&fit=crop&w=600&q=80"],
+  ["Malabar True Ceylon Cinnamon Quills", "Spices & Herbs", "Thin rolled sweet-bark true cinnamon sticks", 890, "kg", 40, "
